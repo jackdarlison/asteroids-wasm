@@ -1,8 +1,12 @@
-use std::{f32::consts::{PI, TAU}, path::Path};
+use std::{
+    f32::consts::{PI, TAU},
+    path::Path,
+};
 
 use macroquad::{
     prelude::*,
-    rand::{self, gen_range}, ui::{root_ui, widgets::Window, Skin},
+    rand::{self, gen_range},
+    ui::{root_ui, widgets::Window, Skin},
 };
 
 const DEBUG: bool = false;
@@ -376,7 +380,7 @@ impl Saucer {
             pos: random_screen_edge_position(),
             vel: random_unit_vector() * speed,
             last_shot: 0.0,
-            collided: false
+            collided: false,
         }
     }
 
@@ -396,7 +400,7 @@ impl Saucer {
                     vel: target * BULLET_SPEED,
                     collided: false,
                 }
-            },
+            }
         }
     }
 }
@@ -472,7 +476,8 @@ fn draw_asteroid(a: &Asteroid) {
 }
 
 fn draw_saucer(s: &Saucer) {
-    SAUCER_VERTICIES.iter()
+    SAUCER_VERTICIES
+        .iter()
         .zip(SAUCER_VERTICIES.iter().cycle().skip(1))
         .for_each(|(v1, v2)| {
             draw_line(
@@ -567,7 +572,6 @@ async fn main() {
         }
 
         if game.game_over {
-
             clear_background(MAROON);
 
             draw_centered_text(
@@ -577,8 +581,11 @@ async fn main() {
                 48.0,
                 BLACK,
             );
-            
-            if root_ui().button(Vec2::new(screen_width() / 2.0, screen_height() / 2.0 + 24.0), "Restart?") {
+
+            if root_ui().button(
+                Vec2::new(screen_width() / 2.0, screen_height() / 2.0 + 24.0),
+                "Restart?",
+            ) {
                 game = Game {
                     lives: INITIAL_LIVES,
                     max_asteroid_spawn_rate: ASTEROID_INITIAL_MAX_SPAWN_RATE,
@@ -595,7 +602,9 @@ async fn main() {
 
         // Asteroid Spawning
         game.last_asteroid += delta_t;
-        if game.asteroids_spawned_in_wave < game.get_wave_asteroid_amount() && game.last_asteroid >= game.next_asteroid_spawn_rate {
+        if game.asteroids_spawned_in_wave < game.get_wave_asteroid_amount()
+            && game.last_asteroid >= game.next_asteroid_spawn_rate
+        {
             game.last_asteroid = 0.0;
             game.asteroids_spawned_in_wave += 1;
             game.next_asteroid_spawn_rate =
@@ -610,10 +619,14 @@ async fn main() {
         // Saucer Spawning
 
         game.last_saucer += delta_t;
-        if game.saucers_spawned_in_wave < SAUCER_MAX_PER_WAVE && game.saucers.len() < SAUCER_MAX && game.last_saucer > SAUCER_SPAWN_RATE {
+        if game.saucers_spawned_in_wave < SAUCER_MAX_PER_WAVE
+            && game.saucers.len() < SAUCER_MAX
+            && game.last_saucer > SAUCER_SPAWN_RATE
+        {
             game.last_saucer = 0.0;
             game.saucers_spawned_in_wave += 1;
-            game.saucers.push(Saucer::new(SaucerSize::from_score(game.score)));
+            game.saucers
+                .push(Saucer::new(SaucerSize::from_score(game.score)));
         }
 
         // Ship Logic
@@ -739,7 +752,7 @@ async fn main() {
             s.pos += s.vel * delta_t;
             wrap_screen(&mut s.pos);
         });
-        
+
         game.saucers.iter_mut().for_each(|s| {
             game.bullets.iter_mut().for_each(|b| {
                 let collided = s.pos.distance(b.pos).abs() < s.size.size() + BULLET_SIZE;
@@ -831,7 +844,8 @@ async fn main() {
                         size: PARTICLE_SIZE,
                     })
                     .collect::<Vec<Particle>>()
-            }).collect();
+            })
+            .collect();
         game.particles.append(&mut new_saucer_particles);
 
         game.score += game
@@ -840,7 +854,8 @@ async fn main() {
             .filter(|a| a.collided)
             .map(|a| a.size.score())
             .sum::<usize>();
-        game.score += game.saucers
+        game.score += game
+            .saucers
             .iter()
             .filter(|s| s.collided)
             .map(|s| s.size.score())
@@ -862,7 +877,8 @@ async fn main() {
         game.asteroids.append(&mut new_asteroids);
         game.bullets.retain(|b| !b.collided);
         game.saucers.retain(|s| !s.collided);
-        game.saucer_bullets.retain(|(b, t)| !(b.collided || *t > SAUCER_BULLET_TTL));
+        game.saucer_bullets
+            .retain(|(b, t)| !(b.collided || *t > SAUCER_BULLET_TTL));
 
         if game.frame % 10 == 0 {
             game.bullets.iter().for_each(|b| {
@@ -887,7 +903,9 @@ async fn main() {
             });
         }
 
-        if game.asteroids_spawned_in_wave == game.get_wave_asteroid_amount() && game.asteroids.len() == 0 {
+        if game.asteroids_spawned_in_wave == game.get_wave_asteroid_amount()
+            && game.asteroids.len() == 0
+        {
             game.asteroid_wave += 1;
             game.asteroids_spawned_in_wave = 0;
             game.saucers_spawned_in_wave = 0;
