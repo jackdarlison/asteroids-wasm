@@ -1,4 +1,4 @@
-use std::f32::consts::{PI, TAU};
+use std::{f32::consts::{PI, TAU}, path::Path};
 
 use macroquad::{
     prelude::*,
@@ -57,10 +57,11 @@ const ASTEROID_MIN_SPAWN_RATE: f32 = 0.5;
 const ASTEROID_INITIAL_MAX_SPAWN_RATE: f32 = 5.0;
 const ASTEROID_SPAWN_DECREASE_FACTOR: f32 = 0.001;
 
+const PARTICLE_SIZE: f32 = 5.0;
+
 const ASTEROID_PARTICLE_SPAWN: usize = 3;
 const ASTEROID_PARTICLE_TTL: f32 = 1.5;
 const ASTEROID_PARTICLE_COLOR: Color = MAROON;
-const ASTEROID_PARTICLE_SIZE: f32 = 5.0;
 const ASTEROID_PARTICLE_SPEED: f32 = 40.0;
 
 const ASTEROID_COLOR: Color = DARKGRAY;
@@ -99,6 +100,10 @@ const SAUCER_VERTICIES: [Vec2; 10] = [
     Vec2::new(-1.1, 0.2),
 ];
 
+const SAUCER_PARTICLE_SPAWN: usize = 3;
+const SAUCER_PARTICLE_TTL: f32 = 1.5;
+const SAUCER_PARTICLE_COLOR: Color = DARKPURPLE;
+const SAUCER_PARTICLE_SPEED: f32 = 40.0;
 
 const BULLET_COLOR: Color = LIME;
 const BULLET_SIZE: f32 = 5.0;
@@ -706,7 +711,7 @@ async fn main() {
 
         game.particles.iter_mut().for_each(|p| {
             p.pos += p.vel * delta_t;
-            p.size = ASTEROID_PARTICLE_SIZE * (1.0 - p.time / p.ttl);
+            p.size = PARTICLE_SIZE * (1.0 - p.time / p.ttl);
             p.color.a = 1.0 - p.time / p.ttl;
             p.time += delta_t;
         });
@@ -803,13 +808,31 @@ async fn main() {
                         ttl: ASTEROID_PARTICLE_TTL,
                         time: 0.0,
                         pos: a.pos,
-                        vel: random_unit_vector().normalize() * ASTEROID_PARTICLE_SPEED,
-                        size: 4.0,
+                        vel: random_unit_vector() * ASTEROID_PARTICLE_SPEED,
+                        size: PARTICLE_SIZE,
                     })
                     .collect::<Vec<Particle>>()
             })
             .collect();
         game.particles.append(&mut new_asteroid_particles);
+
+        let mut new_saucer_particles = game
+            .saucers
+            .iter()
+            .filter(|s| s.collided)
+            .flat_map(|s| {
+                (0..SAUCER_PARTICLE_SPAWN)
+                    .map(|_| Particle {
+                        color: SAUCER_PARTICLE_COLOR,
+                        ttl: SAUCER_PARTICLE_TTL,
+                        time: 0.0,
+                        pos: s.pos,
+                        vel: random_unit_vector() * SAUCER_PARTICLE_SPEED,
+                        size: PARTICLE_SIZE,
+                    })
+                    .collect::<Vec<Particle>>()
+            }).collect();
+        game.particles.append(&mut new_saucer_particles);
 
         game.score += game
             .asteroids
