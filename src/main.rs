@@ -2,7 +2,7 @@ use std::f32::consts::{PI, TAU};
 
 use macroquad::{
     prelude::*,
-    rand::{self, gen_range},
+    rand::{self, gen_range}, ui::{root_ui, widgets::Window, Skin},
 };
 
 const DEBUG: bool = false;
@@ -24,23 +24,23 @@ const HEART_VERTICIES: [Vec2; 8] = [
     Vec2::new(-0.5, -1.0),
 ];
 const HEART_RADIUS: f32 = 16.0;
+const LIFE_SCORE: usize = 10_000;
 
 const SHIP_COLOR: Color = SKYBLUE;
 const SHIP_WIDTH: f32 = 22.0;
 const SHIP_HEIGHT: f32 = 28.0;
 const SHIP_COLLISION_RADIUS: f32 = 10.0;
-const SHIP_ROTATION_SPEED: f32 = 1.8;
+const SHIP_ROTATION_SPEED: f32 = 0.4 * TAU;
 const SHIP_MAX_SPEED: f32 = 80.0;
 const SHIP_ACCELERATION: f32 = 200.0;
 const SHIP_DRAG: f32 = 0.02;
-const SHIP_FLIP_FREQUENCY: f32 = 2.0;
 const SHIP_HYPERSPACE_FREQUENCY: f32 = 2.0;
 const SHIP_HYPERSPACE_MIN_DISTANCE: f32 = 100.0;
 const SHIP_HYPERSPACE_SPEED: f32 = 300.0;
 const SHIP_SHIELD_TIME: f32 = 3.0;
 const SHIP_SHIELD_COLOR: Color = BLUE;
 
-const SMALL_ASTEROID_SIZE: f32 = 10.0;
+const SMALL_ASTEROID_SIZE: f32 = 12.0;
 const SMALL_ASTEROID_SPEED: f32 = 130.0;
 const SMALL_ASTEROID_SCORE: usize = 100;
 
@@ -53,9 +53,9 @@ const LARGE_ASTEROID_SPEED: f32 = 40.0;
 const LARGE_ASTEROID_SCORE: usize = 20;
 
 const ASTEROID_SPLIT_ANGLE: f32 = PI / 6.0;
-const ASTEROID_MIN_SPAWN_RATE: f32 = 1.0;
+const ASTEROID_MIN_SPAWN_RATE: f32 = 0.5;
 const ASTEROID_INITIAL_MAX_SPAWN_RATE: f32 = 5.0;
-const ASTEROID_SPAWN_DECREASE_FACTOR: f32 = 0.005;
+const ASTEROID_SPAWN_DECREASE_FACTOR: f32 = 0.001;
 
 const ASTEROID_PARTICLE_SPAWN: usize = 3;
 const ASTEROID_PARTICLE_TTL: f32 = 1.5;
@@ -69,9 +69,40 @@ const ASTEROID_MAX_VERTICIES: usize = 12;
 const ASTEROID_MIN_RADIUS: f32 = 0.8;
 const ASTEROID_MAX_RADIUS: f32 = 1.1;
 
+const LARGE_SAUCER_SIZE: f32 = 25.0;
+const LARGE_SAUCER_SPEED: f32 = 32.0;
+const LARGE_SAUCER_SCORE: usize = 200;
+
+const SMALL_SAUCER_SIZE: f32 = 15.0;
+const SMALL_SAUCER_SPEED: f32 = 50.0;
+const SMALL_SAUCER_SCORE: usize = 1000;
+
+const SAUCER_SMALL_SCORE_THRESHOLD: usize = 10_000;
+const SAUCER_SMALL_MAX_PROBABILTY: f32 = 0.8;
+const SAUCER_COLOR: Color = DARKPURPLE;
+const SAUCER_SPAWN_RATE: f32 = 10.0;
+const SAUCER_MAX: usize = 3;
+const SAUCER_MAX_PER_WAVE: usize = 5;
+const SAUCER_BULLET_FREQUENCY: f32 = 2.0;
+const SAUCER_BULLET_COLOR: Color = PURPLE;
+const SAUCER_BULLET_TTL: f32 = 3.0;
+const SAUCER_VERTICIES: [Vec2; 10] = [
+    Vec2::new(1.1, 0.2),
+    Vec2::new(0.4, 0.7),
+    Vec2::new(-0.4, 0.7),
+    Vec2::new(-1.1, 0.2),
+    Vec2::new(-0.3, -0.2),
+    Vec2::new(-0.2, -0.7),
+    Vec2::new(0.2, -0.7),
+    Vec2::new(0.3, -0.2),
+    Vec2::new(1.1, 0.2),
+    Vec2::new(-1.1, 0.2),
+];
+
+
 const BULLET_COLOR: Color = LIME;
 const BULLET_SIZE: f32 = 5.0;
-const BULLET_SPEED: f32 = 120.0;
+const BULLET_SPEED: f32 = 150.0;
 const BULLET_FREQUENCY: f32 = 0.2;
 const MAX_BULLETS: usize = 4;
 
@@ -214,7 +245,7 @@ impl Default for Asteroid {
     fn default() -> Self {
         Self {
             size: AsteroidType::Large,
-            pos: Vec2::ZERO,
+            pos: random_screen_edge_position(),
             vel: random_unit_vector() * AsteroidType::Large.speed(),
             collided: false,
             verticies: generate_asteroid_vertices(),
@@ -223,26 +254,6 @@ impl Default for Asteroid {
 }
 
 impl Asteroid {
-    fn new() -> Self {
-        let side: i32 = rand::gen_range(0, 4);
-
-        let pos: Vec2 = match side {
-            // TOP
-            0 => Vec2::new(rand::gen_range(0.0, screen_width()), 0.0),
-            // RIGHT
-            1 => Vec2::new(screen_width(), rand::gen_range(0.0, screen_height())),
-            // BOTTOM
-            2 => Vec2::new(rand::gen_range(0.0, screen_width()), screen_height()),
-            // LEFT
-            _ => Vec2::new(0.0, rand::gen_range(0.0, screen_height())),
-        };
-
-        Self {
-            pos,
-            ..Default::default()
-        }
-    }
-
     fn split(&self) -> Option<Vec<Asteroid>> {
         if let AsteroidType::Small = self.size {
             return None;
@@ -303,6 +314,88 @@ fn generate_asteroid_vertices() -> Vec<Vec2> {
         .collect()
 }
 
+enum SaucerSize {
+    Large,
+    Small,
+}
+
+impl SaucerSize {
+    fn from_score(score: usize) -> Self {
+        let prob = if score >= SAUCER_SMALL_SCORE_THRESHOLD {
+            SAUCER_SMALL_MAX_PROBABILTY
+        } else {
+            SAUCER_SMALL_MAX_PROBABILTY * (score as f32) / (SAUCER_SMALL_SCORE_THRESHOLD as f32)
+        };
+        if rand::gen_range(0.0, 1.0) < prob {
+            Self::Small
+        } else {
+            Self::Large
+        }
+    }
+
+    fn size(&self) -> f32 {
+        match self {
+            Self::Large => LARGE_SAUCER_SIZE,
+            Self::Small => SMALL_SAUCER_SIZE,
+        }
+    }
+
+    fn speed(&self) -> f32 {
+        match self {
+            Self::Large => LARGE_SAUCER_SPEED,
+            Self::Small => SMALL_SAUCER_SPEED,
+        }
+    }
+
+    fn score(&self) -> usize {
+        match self {
+            Self::Large => LARGE_SAUCER_SCORE,
+            Self::Small => SMALL_SAUCER_SCORE,
+        }
+    }
+}
+
+struct Saucer {
+    size: SaucerSize,
+    pos: Vec2,
+    vel: Vec2,
+    last_shot: f32,
+    collided: bool,
+}
+
+impl Saucer {
+    fn new(size: SaucerSize) -> Saucer {
+        let speed = size.speed();
+        Self {
+            size,
+            pos: random_screen_edge_position(),
+            vel: random_unit_vector() * speed,
+            last_shot: 0.0,
+            collided: false
+        }
+    }
+
+    fn shoot(&self, ship: &Ship) -> Bullet {
+        match self.size {
+            SaucerSize::Large => Bullet {
+                pos: self.pos,
+                vel: random_unit_vector() * BULLET_SPEED,
+                collided: false,
+            },
+            SaucerSize::Small => {
+                let prediction_offset = ship.get_unit_direction() * ship.vel.length();
+                let target = (ship.pos + prediction_offset - self.pos).normalize();
+
+                Bullet {
+                    pos: self.pos,
+                    vel: target * BULLET_SPEED,
+                    collided: false,
+                }
+            },
+        }
+    }
+}
+
 struct Particle {
     color: Color,
     ttl: f32,
@@ -342,6 +435,21 @@ fn random_screen_position() -> Vec2 {
     )
 }
 
+fn random_screen_edge_position() -> Vec2 {
+    let side: i32 = rand::gen_range(0, 4);
+
+    match side {
+        // TOP
+        0 => Vec2::new(rand::gen_range(0.0, screen_width()), 0.0),
+        // RIGHT
+        1 => Vec2::new(screen_width(), rand::gen_range(0.0, screen_height())),
+        // BOTTOM
+        2 => Vec2::new(rand::gen_range(0.0, screen_width()), screen_height()),
+        // LEFT
+        _ => Vec2::new(0.0, rand::gen_range(0.0, screen_height())),
+    }
+}
+
 fn draw_asteroid(a: &Asteroid) {
     a.verticies
         .iter()
@@ -354,6 +462,21 @@ fn draw_asteroid(a: &Asteroid) {
                 a.pos.y + a.size.size() * v2.y,
                 2.0,
                 ASTEROID_COLOR,
+            );
+        });
+}
+
+fn draw_saucer(s: &Saucer) {
+    SAUCER_VERTICIES.iter()
+        .zip(SAUCER_VERTICIES.iter().cycle().skip(1))
+        .for_each(|(v1, v2)| {
+            draw_line(
+                s.pos.x + s.size.size() * v1.x,
+                s.pos.y + s.size.size() * v1.y,
+                s.pos.x + s.size.size() * v2.x,
+                s.pos.y + s.size.size() * v2.y,
+                2.0,
+                SAUCER_COLOR,
             );
         });
 }
@@ -377,17 +500,26 @@ fn draw_heart(p: Vec2) {
 #[derive(Default)]
 struct Game {
     ship: Ship,
-    last_flip: f32,
     last_hyperspace: f32,
     lives: usize,
+    lives_awarded: usize,
 
     bullets: Vec<Bullet>,
     last_bullet: f32,
 
     asteroids: Vec<Asteroid>,
+    asteroid_wave: usize,
+    asteroids_spawned_in_wave: usize,
     last_asteroid: f32,
     max_asteroid_spawn_rate: f32,
     next_asteroid_spawn_rate: f32,
+
+    saucers: Vec<Saucer>,
+    last_saucer: f32,
+    saucers_spawned_in_wave: usize,
+
+    // bullet, time alive
+    saucer_bullets: Vec<(Bullet, f32)>,
 
     game_over: bool,
     score: usize,
@@ -397,15 +529,17 @@ struct Game {
     frame: usize,
 }
 
+impl Game {
+    fn get_wave_asteroid_amount(&self) -> usize {
+        self.asteroid_wave * 2 + 2
+    }
+}
+
 #[macroquad::main("Asteroids")]
 async fn main() {
     let mut game = Game {
         lives: INITIAL_LIVES,
         max_asteroid_spawn_rate: ASTEROID_INITIAL_MAX_SPAWN_RATE,
-        next_asteroid_spawn_rate: rand::gen_range(
-            ASTEROID_MIN_SPAWN_RATE,
-            ASTEROID_INITIAL_MAX_SPAWN_RATE,
-        ),
         ..Default::default()
     };
 
@@ -416,7 +550,7 @@ async fn main() {
     let star_map: Vec<(Vec2, f32)> = (0..STAR_NUM)
         .map(|_| {
             (
-                random_screen_position(),
+                Vec2::new(rand::gen_range(0.0, 1.0), rand::gen_range(0.0, 1.0)),
                 rand::gen_range(0.5, STAR_MAX_SIZE),
             )
         })
@@ -428,18 +562,9 @@ async fn main() {
         }
 
         if game.game_over {
-            if is_key_pressed(KeyCode::Enter) {
-                game = Game {
-                    lives: INITIAL_LIVES,
-                    max_asteroid_spawn_rate: ASTEROID_INITIAL_MAX_SPAWN_RATE,
-                    next_asteroid_spawn_rate: rand::gen_range(
-                        ASTEROID_MIN_SPAWN_RATE,
-                        ASTEROID_INITIAL_MAX_SPAWN_RATE,
-                    ),
-                    ..Default::default()
-                };
-            }
-            clear_background(RED);
+
+            clear_background(MAROON);
+
             draw_centered_text(
                 &format!("Final Score: {}", game.score),
                 screen_width() / 2.0,
@@ -447,6 +572,15 @@ async fn main() {
                 48.0,
                 BLACK,
             );
+            
+            if root_ui().button(Vec2::new(screen_width() / 2.0, screen_height() / 2.0 + 24.0), "Restart?") {
+                game = Game {
+                    lives: INITIAL_LIVES,
+                    max_asteroid_spawn_rate: ASTEROID_INITIAL_MAX_SPAWN_RATE,
+                    ..Default::default()
+                };
+            }
+
             next_frame().await;
             continue;
         }
@@ -456,20 +590,29 @@ async fn main() {
 
         // Asteroid Spawning
         game.last_asteroid += delta_t;
-        if game.last_asteroid > game.next_asteroid_spawn_rate {
+        if game.asteroids_spawned_in_wave < game.get_wave_asteroid_amount() && game.last_asteroid >= game.next_asteroid_spawn_rate {
             game.last_asteroid = 0.0;
+            game.asteroids_spawned_in_wave += 1;
             game.next_asteroid_spawn_rate =
                 rand::gen_range(ASTEROID_MIN_SPAWN_RATE, game.max_asteroid_spawn_rate);
-            game.asteroids.push(Asteroid::new());
+            game.asteroids.push(Asteroid::default());
         }
 
         game.max_asteroid_spawn_rate -= (game.max_asteroid_spawn_rate - ASTEROID_MIN_SPAWN_RATE)
             * delta_t
             * ASTEROID_SPAWN_DECREASE_FACTOR;
 
+        // Saucer Spawning
+
+        game.last_saucer += delta_t;
+        if game.saucers_spawned_in_wave < SAUCER_MAX_PER_WAVE && game.saucers.len() < SAUCER_MAX && game.last_saucer > SAUCER_SPAWN_RATE {
+            game.last_saucer = 0.0;
+            game.saucers_spawned_in_wave += 1;
+            game.saucers.push(Saucer::new(SaucerSize::from_score(game.score)));
+        }
+
         // Ship Logic
 
-        game.last_flip += delta_t;
         game.last_bullet += delta_t;
         game.last_hyperspace += delta_t;
 
@@ -486,11 +629,6 @@ async fn main() {
             }
             if is_key_down(KeyCode::D) {
                 game.ship.rot += SHIP_ROTATION_SPEED * delta_t;
-            }
-
-            if is_key_pressed(KeyCode::S) && game.last_flip > SHIP_FLIP_FREQUENCY {
-                game.last_flip = 0.0;
-                game.ship.rot += PI;
             }
 
             if is_key_down(KeyCode::W) {
@@ -565,6 +703,7 @@ async fn main() {
         wrap_screen(&mut game.ship.pos);
 
         // Game logic
+
         game.particles.iter_mut().for_each(|p| {
             p.pos += p.vel * delta_t;
             p.size = ASTEROID_PARTICLE_SIZE * (1.0 - p.time / p.ttl);
@@ -591,6 +730,35 @@ async fn main() {
             });
         });
 
+        game.saucers.iter_mut().for_each(|s| {
+            s.pos += s.vel * delta_t;
+            wrap_screen(&mut s.pos);
+        });
+        
+        game.saucers.iter_mut().for_each(|s| {
+            game.bullets.iter_mut().for_each(|b| {
+                let collided = s.pos.distance(b.pos).abs() < s.size.size() + BULLET_SIZE;
+                s.collided = s.collided || collided;
+                b.collided = b.collided || collided;
+            });
+        });
+
+        game.saucers.iter_mut().for_each(|s| {
+            s.last_shot += delta_t;
+            if s.last_shot > SAUCER_BULLET_FREQUENCY {
+                s.last_shot = 0.0;
+                let bullet = s.shoot(&game.ship);
+                game.saucer_bullets.push((bullet, 0.0));
+            }
+        });
+
+        game.saucer_bullets.iter_mut().for_each(|(b, t)| {
+            b.pos += b.vel * delta_t;
+            wrap_screen(&mut b.pos);
+
+            *t += delta_t;
+        });
+
         let mut ship_hit = false;
 
         game.asteroids.iter_mut().for_each(|a| {
@@ -598,6 +766,20 @@ async fn main() {
                 && game.ship.pos.distance(a.pos) < SHIP_COLLISION_RADIUS + a.size.size();
             ship_hit = ship_hit || collided;
             a.collided = a.collided || collided;
+        });
+
+        game.saucers.iter_mut().for_each(|s| {
+            let collided = !game.ship.state.is_invincible()
+                && game.ship.pos.distance(s.pos) < SHIP_COLLISION_RADIUS + s.size.size();
+            ship_hit = ship_hit || collided;
+            s.collided = s.collided || collided;
+        });
+
+        game.saucer_bullets.iter_mut().for_each(|(b, _)| {
+            let collided = !game.ship.state.is_invincible()
+                && game.ship.pos.distance(b.pos) < SHIP_COLLISION_RADIUS + BULLET_SIZE;
+            ship_hit = ship_hit || collided;
+            b.collided = b.collided || collided;
         });
 
         if ship_hit {
@@ -635,6 +817,16 @@ async fn main() {
             .filter(|a| a.collided)
             .map(|a| a.size.score())
             .sum::<usize>();
+        game.score += game.saucers
+            .iter()
+            .filter(|s| s.collided)
+            .map(|s| s.size.score())
+            .sum::<usize>();
+        if (game.score / LIFE_SCORE) > game.lives_awarded {
+            game.lives += 1;
+            game.lives_awarded += 1;
+        }
+
         let mut new_asteroids: Vec<Asteroid> = game
             .asteroids
             .iter()
@@ -646,6 +838,8 @@ async fn main() {
         game.asteroids.retain(|a| !a.collided);
         game.asteroids.append(&mut new_asteroids);
         game.bullets.retain(|b| !b.collided);
+        game.saucers.retain(|s| !s.collided);
+        game.saucer_bullets.retain(|(b, t)| !(b.collided || *t > SAUCER_BULLET_TTL));
 
         if game.frame % 10 == 0 {
             game.bullets.iter().for_each(|b| {
@@ -658,14 +852,30 @@ async fn main() {
                     size: BULLET_SIZE,
                 });
             });
+            game.saucer_bullets.iter().for_each(|(b, _)| {
+                game.particles.push(Particle {
+                    color: SAUCER_BULLET_COLOR,
+                    ttl: 0.2,
+                    time: 0.0,
+                    vel: Vec2::ZERO,
+                    pos: b.pos,
+                    size: BULLET_SIZE,
+                });
+            });
+        }
+
+        if game.asteroids_spawned_in_wave == game.get_wave_asteroid_amount() && game.asteroids.len() == 0 {
+            game.asteroid_wave += 1;
+            game.asteroids_spawned_in_wave = 0;
+            game.saucers_spawned_in_wave = 0;
         }
 
         // Display
         clear_background(BACKGROUND_COLOR);
         star_map.iter().for_each(|(p, r)| {
             draw_circle(
-                p.x,
-                p.y,
+                p.x * screen_width(),
+                p.y * screen_height(),
                 *r,
                 STAR_COLORS[rand::gen_range(0, STAR_COLORS.len())],
             );
@@ -682,7 +892,7 @@ async fn main() {
             ShipState::Hyperdrive => draw_circle_lines(
                 game.ship.current_translation.to.x,
                 game.ship.current_translation.to.y,
-                SHIP_COLLISION_RADIUS * 0.66,
+                SHIP_COLLISION_RADIUS * 0.5,
                 2.0,
                 RED,
             ),
@@ -702,9 +912,15 @@ async fn main() {
 
         game.asteroids.iter().for_each(draw_asteroid);
 
+        game.saucers.iter().for_each(draw_saucer);
+
         game.bullets
             .iter()
             .for_each(|b| draw_circle(b.pos.x, b.pos.y, BULLET_SIZE, BULLET_COLOR));
+
+        game.saucer_bullets
+            .iter()
+            .for_each(|(b, _)| draw_circle(b.pos.x, b.pos.y, BULLET_SIZE, SAUCER_BULLET_COLOR));
 
         // UI
         draw_centered_text(
@@ -722,41 +938,21 @@ async fn main() {
                 ((2.0 * (i as f32)) / ((game.lives as f32) - 1.0)) - 1.0
             };
             draw_heart(Vec2::new(
-                screen_width() / 2.0 + x * HEART_RADIUS * 3.0,
+                screen_width() / 2.0 + x * HEART_RADIUS * (game.lives as f32),
                 60.0,
             ));
         }
 
-        let (height, flip_bar_colour) = if game.last_flip > SHIP_FLIP_FREQUENCY {
-            (50.0, GREEN)
-        } else {
-            (50.0 * game.last_flip / SHIP_FLIP_FREQUENCY, YELLOW)
-        };
-        draw_rectangle(
-            screen_width() - 30.0,
-            screen_height() - 20.0 - height,
-            20.0,
-            height,
-            flip_bar_colour,
-        );
-        draw_centered_text(
-            "Flip",
-            screen_width() - 20.0,
-            screen_height() - 10.0,
-            16.0,
-            WHITE,
-        );
-
         let (height, hyperspace_bar_colour) = if game.last_hyperspace > SHIP_HYPERSPACE_FREQUENCY {
-            (50.0, GREEN)
+            (30.0, GREEN)
         } else {
             (
-                50.0 * game.last_hyperspace / SHIP_HYPERSPACE_FREQUENCY,
+                30.0 * game.last_hyperspace / SHIP_HYPERSPACE_FREQUENCY,
                 YELLOW,
             )
         };
         draw_rectangle(
-            screen_width() - 100.0,
+            screen_width() - 50.0,
             screen_height() - 20.0 - height,
             20.0,
             height,
@@ -764,7 +960,7 @@ async fn main() {
         );
         draw_centered_text(
             "Hyperspace",
-            screen_width() - 90.0,
+            screen_width() - 40.0,
             screen_height() - 10.0,
             16.0,
             WHITE,
@@ -803,8 +999,8 @@ async fn main() {
             // Asteroid spawning info
             draw_text(
                 &format!(
-                    "Next Asteroid spawn: {:.2} (max {:.2})",
-                    game.next_asteroid_spawn_rate, game.max_asteroid_spawn_rate
+                    "Wave: {}({}). Spawned {} Asteroids, {} Saucers. Next Asteroid spawn: {:.2} (max {:.2})",
+                    game.asteroid_wave, game.asteroids_spawned_in_wave, game.asteroids_spawned_in_wave, game.saucers_spawned_in_wave, game.next_asteroid_spawn_rate, game.max_asteroid_spawn_rate
                 ),
                 5.0,
                 screen_height() - 10.0,
