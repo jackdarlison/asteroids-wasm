@@ -1,12 +1,9 @@
-use std::{
-    f32::consts::{PI, TAU},
-    path::Path,
-};
+use std::f32::consts::{PI, TAU};
 
 use macroquad::{
     prelude::*,
     rand::{self, gen_range},
-    ui::{root_ui, widgets::Window, Skin},
+    ui::root_ui,
 };
 
 const DEBUG: bool = false;
@@ -708,7 +705,7 @@ async fn main() {
         } else {
             game.ship.pos = game.ship.current_translation.get();
             game.ship.color.a =
-                0.5 + ((game.ship.current_translation.current_time * 20.0).cos() as f32) * 0.5;
+                0.5 + (game.ship.current_translation.current_time * 20.0).cos() * 0.5;
 
             game.ship.current_translation.current_time += delta_t;
 
@@ -904,7 +901,7 @@ async fn main() {
         }
 
         if game.asteroids_spawned_in_wave == game.get_wave_asteroid_amount()
-            && game.asteroids.len() == 0
+            && game.asteroids.is_empty()
         {
             game.asteroid_wave += 1;
             game.asteroids_spawned_in_wave = 0;
